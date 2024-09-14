@@ -5,52 +5,12 @@ import os
 import sys
 import utils
 import json
-import requests
+import time
 
 from c_check import c_checker
 from go_check import go_checker
 from cpp_check import cpp_checker
 from log_module import info_log, error_log
-from collections import namedtuple
-
-CommitInfo = namedtuple('CommitInfo', ['repo_name', 'branch', 'committer', 'commit_event', 'commit_hash', 'commit_event_id', 'jenkins_url', 'email'])
-
-def send_webhook_request(data, commit_info):
-    """
-    发送POST请求到指定的webhook地址。
-
-    :param url: webhook地址
-    :param data: 要发送的数据结构体
-    """
-    headers = {
-        "Content-Type": "application/json"
-    }
-    
-    url = "https://cooperation.uniontech.com/api/workflow/hooks/NjZjNTg4YzUwYjEwOTIwMDc0MGZlMWQ0"  # 替换为你的webhook地址
-
-    send_data = {
-        'project_name': data['project_path'],
-        'dbus_count': data['dbus_method_count'],
-        'unsafe_count': data['unsafe_call_count'],
-        'scan_result': data['scan_result'],
-        'details': data['details'],
-        'repo_name': commit_info["repo_name"],
-        'branch': commit_info["branch"],
-        'committer': commit_info["committer"],
-        'commit_event': commit_info["commit_event"],
-        'commit_hash': commit_info["commit_hash"],
-        'commit_event_id': commit_info["commit_event_id"],
-        'jenkins_url':commit_info['jenkins_url'],
-        'email':commit_info['email']
-    }
-
-    try:
-        response = requests.post(url, data=json.dumps(send_data), headers=headers)
-        response.raise_for_status()  # 如果响应状态码不是200，抛出HTTPError异常
-        return response.json()  # 返回响应的JSON数据
-    except requests.exceptions.RequestException as e:
-        print(f"请求失败: {e}")
-        return None
 
 def main():
 
@@ -64,9 +24,6 @@ def main():
     # 获取源码路径
     source_directory = args.source_directory
     commit_info_str = args.commit_info_str
-    # DEBUG Info
-    # print(type(commit_info_str))
-    # print("commit_info_str is ", commit_info_str)
     commit_info = json.loads(commit_info_str)
     
     # 检查源码路径是否存在
@@ -112,16 +69,31 @@ def main():
             f.write(json.dumps(result_sum))
 
         if results == True:
-            info_log(f"{data}")
-            info_log(commit_info["repo_name"])
-
+            info_log(f"检测项目:{commit_info['repo_name']}\n扫描结果:{result_sum}")
             info_log(f"{language.capitalize()} D-Bus 检查完成！")
 
-            response_data = send_webhook_request(data, commit_info)
+            # 发送请求到 webhook
+            response_data = utils.send_webhook_request(data, commit_info)
             if response_data:
-                print(f"请求成功，响应数据: {response_data}")
+                info_log(f"DBUS扫描结果发送成功!")
             else:
-                print("请求失败")
+                error_log(f"DBUS扫描结果请求失败!")
+
+            def parse_data(data, commit_info):
+                details = data.get('details', [])
+                for detail in details:
+                    time.sleep(1)
+                    response_v2_data = utils.send_webhook_request_v2(detail, commit_info)   
+                    if response_v2_data:
+                        info_log(f"系统调用结果请求成功! 函数名：{detail['function_name']}")
+                    else:
+                        error_log("系统调用结果请求失败!")
+            
+            if data['scan_result'] == "unpassed":
+                parse_data(data, commit_info)
+                info_log(f"系统调用结果请求完成!")
+            else:
+                error_log(f"异常结果，请检查代码！")
 
         else:
             info_log(f"{language.capitalize()} D-Bus 检查异常！")

@@ -32,7 +32,6 @@ def get_cpp_files(project_path):
     return cpp_files
 
 # 获取函数具体代码
-# 获取函数具体代码
 def get_function_code(cursor):
     try:
         start = cursor.extent.start
@@ -101,6 +100,8 @@ def find_dbus_methods(cpp_files):
                                 # 检查是否已经记录过相同行号的危险调用
                                 if call_signature in recorded_lines:
                                     continue  # 如果已经记录过，则跳过
+                                
+                                print(f"{unsafe_call}")
 
                                 dangerous_call_info = {
                                     "unsafe_function": unsafe_func,
@@ -164,10 +165,10 @@ def check_dbus_in_cpp(project_path):
         info_log(f"项目:{project_path}，扫描完成")
 
         if not parsed_json["unsafe_call_count"]:
-            info_log(f"检查通过!\n未发现危险调用!")
+            info_log(f"检查通过! 未发现危险调用")
             return True, parsed_json
         else:
-            warning_log("检查不通过：发现不安全调用")
+            warning_log("检查不通过！发现不安全调用")
             return True, parsed_json
 
     except Exception as e:

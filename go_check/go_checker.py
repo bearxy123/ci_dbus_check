@@ -1,3 +1,11 @@
+'''
+Descripttion: 
+version: 
+Author: 
+Date: 2024-08-20 17:25:27
+LastEditors: smile
+LastEditTime: 2024-08-30 09:27:23
+'''
 import json
 import subprocess
 import os
@@ -39,10 +47,10 @@ def check_dbus_in_go(path):
         unsafe_found = result['unsafe_call_count'] > 0
 
         if unsafe_found:
-            warning_log(f"检查不通过!\n发现不安全调用")
+            warning_log(f"检查不通过!发现不安全调用")
             return True, result
         else:
-            info_log(f"检查通过!\n未发现不安全调用")
+            info_log(f"检查通过!未发现不安全调用")
             return True, result
     
     except subprocess.CalledProcessError as e:

@@ -3,6 +3,11 @@ import re
 import os
 import subprocess
 import sys
+import requests
+import json
+
+
+from urllib.parse import quote
 import xml.etree.ElementTree as ET
 from log_module import info_log, error_log
 
@@ -96,7 +101,6 @@ def check_and_install():
         try:
             # 检查包是否已安装
             subprocess.check_call(['sudo', 'dpkg', '-s', package], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            # print(f'{package} 已安装')
         except subprocess.CalledProcessError:
             # 如果包未安装，则安装
             info_log(f'{package} 未安装，正在安装...')
@@ -110,7 +114,6 @@ def check_and_install():
     for module in python_modules:
         try:
             __import__(module)
-            # print(f'Python模块 {module} 已安装')
         except ImportError:
             info_log(f'Python模块 {module} 未安装，正在安装...')
             try:
@@ -136,6 +139,111 @@ def load_list_from_text(file_path):
             # 读取每行并去除首尾空白字符，然后返回作为列表
             return [line.strip() for line in file if line.strip()]
     except IOError as e:
-        print(f"读取纯文本配置文件时发生错误: {e}")
+        error_log(f"读取纯文本配置文件时发生错误: {e}")
         return []
 
+
+
+def send_webhook_request(data, commit_info):
+    """
+    发送POST请求到指定的webhook地址。
+
+    :param url: webhook地址
+    :param data: 要发送的数据结构体
+    """
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
+    url = "https://cooperation.uniontech.com/api/workflow/hooks/NjZlNGZkMDdiNWIzMGQ1NGIzOGM1NzY2"  # 替换为你的webhook地址
+    
+    send_data = {
+        'project_name': data['project_path'],
+        'dbus_count': data['dbus_method_count'],
+        'unsafe_count': data['unsafe_call_count'],
+        'scan_result': data['scan_result'],
+        'details': str(data['details']),
+        'repo_name': commit_info["repo_name"],
+        'branch': commit_info["branch"],
+        'committer': commit_info["committer"],
+        'commit_event': commit_info["commit_event"],
+        'commit_hash': commit_info["commit_hash"],
+        'commit_event_id': commit_info["commit_event_id"],
+        'jenkins_url':commit_info['jenkins_url'],
+        'email':commit_info['email'],
+    }
+
+    try:
+        response = requests.post(url, data=json.dumps(send_data), headers=headers)
+        response.raise_for_status()  # 如果响应状态码不是200，抛出HTTPError异常
+        return response.json()  # 返回响应的JSON数据
+    except requests.exceptions.RequestException as e:
+        print(f"请求失败: {e}")
+        return None
+    
+
+def code_content_format(code_content):
+    
+    target_calls = [
+    "system", 
+    "popen", 
+    "fopen",  
+    "QProcess::start", 
+    "QProcess::execute", 
+    "QProcess::setProgram", 
+    "QProcess::setArguments", 
+    "process.start", 
+    "m_process.start", 
+    "os.Command", 
+    "exec.Command", 
+    "os.Run"
+    ]
+
+
+    for call in target_calls:
+            # 查找目标调用的位置
+            index = code_content.find(call)
+            if index != -1:
+                # 找到后，提取目标调用后面的内容
+                return code_content[index:]
+    return None
+
+
+def send_webhook_request_v2(details_data, commit_info):
+    """
+    发送POST请求到指定的webhook地址。
+
+    :param url: webhook地址
+    :param data: 要发送的数据结构体
+    """
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    url = "https://cooperation.uniontech.com/api/workflow/hooks/NjZlNGZmNTRiNWIzMGQ1NGIzOGM3NGMy"
+
+    code_tmp = re.sub(r'[\u4e00-\u9fff]+', '', details_data['code_content'].strip(';').replace('"', "").replace("'", ""))
+    code_contenet = code_content_format(code_tmp)
+
+    send_data = {
+        'repo_name': commit_info["repo_name"],
+        'branch': commit_info["branch"],
+        'email':commit_info['email'],
+        'commit_event': commit_info["commit_event"],
+        'commit_hash': commit_info["commit_hash"],
+        'commit_event_id': commit_info["commit_event_id"],
+        'function_name': details_data['function_name'],
+        'unsafe_call': details_data['unsafe_call'],
+        'code_line':details_data['code_line'],
+        'path':quote(details_data['file_path']),
+        'code_content': code_contenet,
+    }
+
+    # print(json.dumps(send_data))
+    try:
+        response = requests.post(url, data=json.dumps(send_data), headers=headers)
+        response.raise_for_status()  # 如果响应状态码不是200，抛出HTTPError异常
+        return response.json()  # 返回响应的JSON数据
+    except requests.exceptions.RequestException as e:
+        error_log(f"请求失败: {e}")
+        return None

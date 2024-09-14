@@ -43,24 +43,24 @@ def analyze_ast_for_functions_with_system_calls(source_dir, sd_bus_methods):
     def traverse_child(node, func_name, source_file):
         unsafe_functions = utils.load_list_from_text(C_UNSAFE_CONF_PATH)
         nonlocal found_dangerous_calls, dangerous_call_count
-        if node.kind == clang.cindex.CursorKind.CALL_EXPR and node.spelling in unsafe_functions:
+        if node.kind == clang.cindex.CursorKind.CALL_EXPR  and node.spelling in unsafe_functions:
             line = node.location.line
             code_line = node.get_definition().extent.start.line if node.get_definition() else line
             file_path = source_file
             code_content = get_code_content(file_path, line)
-            # warning_log(f"函数名称：{func_name} | 不安全调用：{node.spelling} | 代码行：{line} | 文件路径：{file_path} | 代码内容：{code_content}")
-            
-            # 保存到输出列表中
-            output_list.append({
-                "function_name": func_name,
-                "unsafe_call": node.spelling,
-                "code_line": line,
-                "file_path": file_path,
-                "code_content": code_content
-            })
+            if code_content is not None:
+                print({code_content})
+                # 保存到输出列表中
+                output_list.append({
+                    "function_name": func_name,
+                    "unsafe_call": node.spelling,
+                    "code_line": line,
+                    "file_path": file_path,
+                    "code_content": code_content
+                })
 
-            found_dangerous_calls = True
-            dangerous_call_count += 1
+                found_dangerous_calls = True
+                dangerous_call_count += 1
         
         for child in node.get_children():
             traverse_child(child, func_name, source_file)
@@ -71,9 +71,16 @@ def analyze_ast_for_functions_with_system_calls(source_dir, sd_bus_methods):
             with open(file_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
                 if 0 < line_number <= len(lines):
-                    return lines[line_number - 1].strip()
+                    line_content = lines[line_number - 1].strip()
+                    filtered_content = re.sub(r'system\(["\'][^"\']*["\']\)', '', line_content)
+
+                    if "system" in filtered_content:
+                        return line_content  # 返回原始行内容，因为它可能包含变量
+                    else:
+                        return None
                 else:
                     return "Line not available"
+
         except Exception as e:
             return f"Error reading file: {e}"
 
@@ -107,10 +114,10 @@ def check_dbus_in_c(source_dir):
         }
 
         if found_dangerous_calls:
-            warning_log(f"检查不通过!\n发现不安全调用")
+            warning_log(f"检查不通过!发现不安全调用")
             return True, result_data
         else:
-            info_log(f"检查通过!\n未发现不安全调用")
+            info_log(f"检查通过!未发现不安全调用")
             return True, result_data
         
     except Exception as e:
